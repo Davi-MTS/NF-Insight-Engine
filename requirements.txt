@@ -1,1 +1,7 @@
-
+streamlit
+pyzbar
+PIL
+datetime
+supabase
+pandas
+re
