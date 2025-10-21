@@ -2,7 +2,7 @@ import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import pandas as pd
 import re
@@ -80,9 +80,13 @@ def save_chave_supabase(chave: str) -> bool:
         if existing.data:
             return False  # Já existe
 
+        # Hora local de Brasília sem milissegundos
+        fuso_brasilia = timezone(timedelta(hours=-3))
+        hora_formatada = datetime.now(fuso_brasilia).strftime("%Y-%m-%d %H:%M:%S")
+
         supabase.table("qrcodes").insert({
             "access_key": chave,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": hora_formatada
         }).execute()
         return True
     except Exception:
