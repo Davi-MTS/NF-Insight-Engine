@@ -1,10 +1,12 @@
 import streamlit as st
-import requests
+import cv2
+import numpy as np
 from PIL import Image
 from datetime import datetime
 from supabase import create_client, Client
 import pandas as pd
 import re
+import requests
 import io
 
 # =========================
@@ -20,37 +22,65 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
+except Exception:
     st.error("❌ Erro ao conectar ao Supabase.")
 
 # =========================
 # FUNÇÕES AUXILIARES
 # =========================
 def extract_chave_acesso(text: str) -> str:
+    """Extrai a chave de 44 dígitos do QR Code"""
     match = re.search(r"\b\d{44}\b", text)
     return match.group(0) if match else None
 
+
+def decode_qrcode_opencv(image: Image.Image) -> str:
+    """Lê QR Code com OpenCV"""
+    img_array = np.array(image.convert("RGB"))
+    img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    detector = cv2.QRCodeDetector()
+
+    # equaliza o contraste para melhorar leitura em fotos do celular
+    img_gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+    img_eq = cv2.equalizeHist(img_gray)
+
+    data, bbox, _ = detector.detectAndDecode(img_eq)
+    return data.strip() if data else None
+
+
 def decode_qrcode_api(image: Image.Image) -> str:
-    """Envia imagem para API externa e retorna o conteúdo do QR Code"""
+    """Fallback: usa API ZXing se OpenCV não reconhecer"""
     try:
-        buffered = io.BytesIO()
-        image.save(buffered, format="PNG")
-        buffered.seek(0)
-        files = {'file': ('qrcode.png', buffered, 'image/png')}
-        response = requests.post("https://api.qrserver.com/v1/read-qr-code/", files=files)
-        result = response.json()
-        if result and result[0]["symbol"][0]["data"]:
-            return result[0]["symbol"][0]["data"].strip()
-        return None
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        files = {"file": ("qrcode.png", buffer.getvalue(), "image/png")}
+        resp = requests.post("https://zxing.org/w/decode", files=files, timeout=15)
+
+        if resp.status_code == 200 and "Raw text" in resp.text:
+            match = re.search(r"Raw text</td><td>(.*?)</td>", resp.text)
+            if match:
+                return match.group(1).strip()
     except Exception as e:
-        st.error("Erro ao decodificar QR Code pela API externa.")
-        return None
+        st.warning(f"⚠ Erro ao usar API ZXing: {e}")
+    return None
+
+
+def decode_qrcode(image: Image.Image) -> str:
+    """Híbrido — tenta OpenCV primeiro, depois API ZXing"""
+    data = decode_qrcode_opencv(image)
+    if data:
+        return data
+    return decode_qrcode_api(image)
+
 
 def save_chave_supabase(chave: str, origem: str) -> bool:
+    """Salva a chave no Supabase se ainda não existir"""
     try:
         existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
         if existing.data:
-            return False
+            return False  # Já existe
+
         supabase.table("qrcodes").insert({
             "chave": chave,
             "origem": origem,
@@ -60,7 +90,9 @@ def save_chave_supabase(chave: str, origem: str) -> bool:
     except:
         return False
 
+
 def get_historico() -> pd.DataFrame:
+    """Retorna todas as chaves salvas no Supabase"""
     try:
         response = supabase.table("qrcodes").select("*").order("datahora", desc=True).execute()
         if response.data:
@@ -69,10 +101,11 @@ def get_historico() -> pd.DataFrame:
     except:
         return pd.DataFrame(columns=["chave", "origem", "datahora"])
 
+
 # =========================
 # INTERFACE PRINCIPAL
 # =========================
-st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e) - API Externa")
+st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e)")
 
 tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de imagem"])
 
@@ -85,9 +118,9 @@ with tab1:
 
     if photo:
         img = Image.open(photo)
-        data = decode_qrcode_api(img)
+        data = decode_qrcode(img)
         if not data:
-            st.warning("Nenhum QR Code encontrado na imagem.")
+            st.warning("⚠ Nenhum QR Code encontrado. Tente aproximar e manter o foco.")
         else:
             chave = extract_chave_acesso(data)
             if chave:
@@ -106,9 +139,9 @@ with tab2:
 
     if file:
         img = Image.open(file)
-        data = decode_qrcode_api(img)
+        data = decode_qrcode(img)
         if not data:
-            st.warning("Nenhum QR Code encontrado na imagem.")
+            st.warning("⚠ Não foi possível decodificar o QR Code. Tente outra imagem.")
         else:
             chave = extract_chave_acesso(data)
             if chave:
@@ -127,7 +160,7 @@ st.subheader("📋 Chaves de Acesso Salvas")
 df = get_historico()
 
 if not df.empty:
-    st.dataframe(df.sort_values(by="datahora", ascending=False), width="stretch")
+    st.dataframe(df.sort_values(by="datahora", ascending=False), use_container_width=True)
 
     col1, col2 = st.columns(2)
     with col1:
