@@ -1,5 +1,6 @@
 import streamlit as st
-from pyzbar import pyzbar
+import cv2
+import numpy as np
 from PIL import Image
 from datetime import datetime
 from supabase import create_client, Client
@@ -20,7 +21,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    st.error(f"Erro ao conectar ao Supabase: {e}")
+    st.error("❌ Erro ao conectar ao Supabase.")
 
 # =========================
 # FUNÇÕES AUXILIARES
@@ -30,23 +31,30 @@ def extract_chave_acesso(text: str) -> str:
     match = re.search(r"\b\d{44}\b", text)
     return match.group(0) if match else None
 
+def decode_qrcode(image: Image.Image) -> str:
+    """Lê QR Code usando OpenCV (funciona na nuvem)"""
+    img_array = np.array(image.convert("RGB"))
+    img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    detector = cv2.QRCodeDetector()
+    data, bbox, _ = detector.detectAndDecode(img_cv)
+    return data.strip() if data else None
+
 def save_chave_supabase(chave: str, origem: str) -> bool:
     """Salva a chave no Supabase se ainda não existir"""
     try:
-        # Checa duplicidade
+        # Checa duplicidade real
         existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
         if existing.data:
             return False  # Já existe
 
-        # Inserção da chave
+        # Insere nova chave
         supabase.table("qrcodes").insert({
             "chave": chave,
             "origem": origem,
             "datahora": datetime.now().isoformat()
         }).execute()
         return True
-    except Exception as e:
-        st.error(f"Erro ao salvar no Supabase: {e}")
+    except:
         return False
 
 def get_historico() -> pd.DataFrame:
@@ -56,8 +64,7 @@ def get_historico() -> pd.DataFrame:
         if response.data:
             return pd.DataFrame(response.data)
         return pd.DataFrame(columns=["chave", "origem", "datahora"])
-    except Exception as e:
-        st.error(f"Erro ao buscar histórico: {e}")
+    except:
         return pd.DataFrame(columns=["chave", "origem", "datahora"])
 
 # =========================
@@ -73,46 +80,42 @@ tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de imagem"])
 with tab1:
     st.write("📸 Tire uma foto do QR Code da nota fiscal usando a câmera do seu celular ou notebook.")
     photo = st.camera_input("Tire uma foto do QR Code")
-    
+
     if photo:
-        img = Image.open(photo).convert("RGB")
-        decoded = pyzbar.decode(img)
-        if not decoded:
+        img = Image.open(photo)
+        data = decode_qrcode(img)
+        if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
         else:
-            for obj in decoded:
-                data = obj.data.decode("utf-8")
-                chave = extract_chave_acesso(data)
-                if chave:
-                    if save_chave_supabase(chave, "Foto"):
-                        st.success(f"✅ Chave salva: {chave}")
-                    else:
-                        st.info(f"⚠ Chave já existente: {chave}")
+            chave = extract_chave_acesso(data)
+            if chave:
+                if save_chave_supabase(chave, "Foto"):
+                    st.success(f"✅ Chave salva: {chave}")
                 else:
-                    st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
+                    st.info(f"⚠ Chave já existente: {chave}")
+            else:
+                st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
 
 # -------------------------
 # TAB 2: Upload de Imagem
 # -------------------------
 with tab2:
     file = st.file_uploader("Selecione uma imagem de nota fiscal (JPG, PNG)...", type=["jpg", "jpeg", "png"])
-    
+
     if file:
-        img = Image.open(file).convert("RGB")
-        decoded = pyzbar.decode(img)
-        if not decoded:
+        img = Image.open(file)
+        data = decode_qrcode(img)
+        if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
         else:
-            for obj in decoded:
-                data = obj.data.decode("utf-8")
-                chave = extract_chave_acesso(data)
-                if chave:
-                    if save_chave_supabase(chave, "Upload"):
-                        st.success(f"✅ Chave salva: {chave}")
-                    else:
-                        st.info(f"⚠ Chave já existente: {chave}")
+            chave = extract_chave_acesso(data)
+            if chave:
+                if save_chave_supabase(chave, "Upload"):
+                    st.success(f"✅ Chave salva: {chave}")
                 else:
-                    st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
+                    st.info(f"⚠ Chave já existente: {chave}")
+            else:
+                st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
 
 # -------------------------
 # HISTÓRICO
@@ -123,7 +126,7 @@ df = get_historico()
 
 if not df.empty:
     st.dataframe(df.sort_values(by="datahora", ascending=False), width="stretch")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         st.download_button("⬇ Baixar CSV", df.to_csv(index=False), "qrcodes.csv", "text/csv")
@@ -132,7 +135,7 @@ if not df.empty:
             try:
                 supabase.table("qrcodes").delete().neq("id", 0).execute()
                 st.warning("Histórico apagado com sucesso!")
-            except Exception as e:
-                st.error(f"Erro ao limpar histórico: {e}")
+            except:
+                st.error("Erro ao limpar histórico.")
 else:
     st.info("Nenhuma chave registrada até o momento.")
