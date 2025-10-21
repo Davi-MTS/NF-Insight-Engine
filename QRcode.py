@@ -12,42 +12,6 @@ import re
 # =========================
 st.set_page_config(page_title="Leitor de QR Code - NFC-e", layout="wide")
 
-# 💡 CSS para aumentar o espelho da câmera (sem zoom na imagem tirada)
-st.markdown(
-    """
-    <style>
-    /* Aumenta o tamanho da visualização da câmera (espelho) */
-    [data-testid="stCameraInput"] video {
-        width: 100% !important;
-        max-width: 600px !important;   /* deixa bem grande, mas responsivo */
-        height: auto !important;
-        aspect-ratio: 3/4 !important;  /* formato vertical */
-        border-radius: 12px;
-        box-shadow: 0 0 15px rgba(0,0,0,0.25);
-        margin: 0 auto;
-        display: block;
-    }
-
-    /* Centraliza e dá espaço ao redor */
-    [data-testid="stCameraInput"] {
-        display: flex;
-        justify-content: center;
-        margin-top: 1rem;
-        margin-bottom: 2rem;
-    }
-
-    /* Ajuste especial para celular (ainda maior) */
-    @media (max-width: 600px) {
-        [data-testid="stCameraInput"] video {
-            max-width: 100% !important;
-            aspect-ratio: 3/4 !important;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # =========================
 # SUPABASE CONFIGURAÇÃO
 # =========================
@@ -78,9 +42,12 @@ def decode_qrcode(image: Image.Image) -> str:
 def save_chave_supabase(chave: str, origem: str) -> bool:
     """Salva a chave no Supabase se ainda não existir"""
     try:
+        # Checa duplicidade real
         existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
         if existing.data:
-            return False
+            return False  # Já existe
+
+        # Insere nova chave
         supabase.table("qrcodes").insert({
             "chave": chave,
             "origem": origem,
