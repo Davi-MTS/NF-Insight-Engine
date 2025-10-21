@@ -1,11 +1,11 @@
 import streamlit as st
-import cv2
-import numpy as np
+import requests
 from PIL import Image
 from datetime import datetime
 from supabase import create_client, Client
 import pandas as pd
 import re
+import io
 
 # =========================
 # CONFIGURAÇÕES INICIAIS
@@ -27,27 +27,30 @@ except Exception as e:
 # FUNÇÕES AUXILIARES
 # =========================
 def extract_chave_acesso(text: str) -> str:
-    """Extrai a chave de 44 dígitos do QR Code"""
     match = re.search(r"\b\d{44}\b", text)
     return match.group(0) if match else None
 
-def decode_qrcode(image: Image.Image) -> str:
-    """Lê QR Code usando OpenCV (funciona na nuvem)"""
-    img_array = np.array(image.convert("RGB"))
-    img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    detector = cv2.QRCodeDetector()
-    data, bbox, _ = detector.detectAndDecode(img_cv)
-    return data.strip() if data else None
+def decode_qrcode_api(image: Image.Image) -> str:
+    """Envia imagem para API externa e retorna o conteúdo do QR Code"""
+    try:
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        buffered.seek(0)
+        files = {'file': ('qrcode.png', buffered, 'image/png')}
+        response = requests.post("https://api.qrserver.com/v1/read-qr-code/", files=files)
+        result = response.json()
+        if result and result[0]["symbol"][0]["data"]:
+            return result[0]["symbol"][0]["data"].strip()
+        return None
+    except Exception as e:
+        st.error("Erro ao decodificar QR Code pela API externa.")
+        return None
 
 def save_chave_supabase(chave: str, origem: str) -> bool:
-    """Salva a chave no Supabase se ainda não existir"""
     try:
-        # Checa duplicidade real
         existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
         if existing.data:
-            return False  # Já existe
-
-        # Insere nova chave
+            return False
         supabase.table("qrcodes").insert({
             "chave": chave,
             "origem": origem,
@@ -58,7 +61,6 @@ def save_chave_supabase(chave: str, origem: str) -> bool:
         return False
 
 def get_historico() -> pd.DataFrame:
-    """Retorna todas as chaves salvas no Supabase"""
     try:
         response = supabase.table("qrcodes").select("*").order("datahora", desc=True).execute()
         if response.data:
@@ -70,7 +72,7 @@ def get_historico() -> pd.DataFrame:
 # =========================
 # INTERFACE PRINCIPAL
 # =========================
-st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e)")
+st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e) - API Externa")
 
 tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de imagem"])
 
@@ -83,7 +85,7 @@ with tab1:
 
     if photo:
         img = Image.open(photo)
-        data = decode_qrcode(img)
+        data = decode_qrcode_api(img)
         if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
         else:
@@ -104,7 +106,7 @@ with tab2:
 
     if file:
         img = Image.open(file)
-        data = decode_qrcode(img)
+        data = decode_qrcode_api(img)
         if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
         else:
