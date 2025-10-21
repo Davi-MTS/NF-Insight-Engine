@@ -12,16 +12,36 @@ import re
 # =========================
 st.set_page_config(page_title="Leitor de QR Code - NFC-e", layout="wide")
 
-# CSS para aumentar a câmera no celular
+# 💡 CSS para aumentar o espelho da câmera (sem zoom na imagem tirada)
 st.markdown(
     """
     <style>
-    [data-testid="stCameraInput"] video,
-    [data-testid="stCameraInput"] canvas {
+    /* Aumenta o tamanho da visualização da câmera (espelho) */
+    [data-testid="stCameraInput"] video {
         width: 100% !important;
+        max-width: 600px !important;   /* deixa bem grande, mas responsivo */
         height: auto !important;
-        border-radius: 16px;
+        aspect-ratio: 3/4 !important;  /* formato vertical */
+        border-radius: 12px;
         box-shadow: 0 0 15px rgba(0,0,0,0.25);
+        margin: 0 auto;
+        display: block;
+    }
+
+    /* Centraliza e dá espaço ao redor */
+    [data-testid="stCameraInput"] {
+        display: flex;
+        justify-content: center;
+        margin-top: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    /* Ajuste especial para celular (ainda maior) */
+    @media (max-width: 600px) {
+        [data-testid="stCameraInput"] video {
+            max-width: 100% !important;
+            aspect-ratio: 3/4 !important;
+        }
     }
     </style>
     """,
@@ -36,7 +56,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception:
+except Exception as e:
     st.error("❌ Erro ao conectar ao Supabase.")
 
 # =========================
@@ -96,7 +116,6 @@ with tab1:
 
     if photo:
         img = Image.open(photo)
-        st.image(img, caption="📸 Imagem capturada", use_container_width=True)
         data = decode_qrcode(img)
         if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
@@ -118,7 +137,6 @@ with tab2:
 
     if file:
         img = Image.open(file)
-        st.image(img, caption="🖼 Imagem enviada", use_container_width=True)
         data = decode_qrcode(img)
         if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
