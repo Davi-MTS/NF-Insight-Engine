@@ -1,8 +1,5 @@
 streamlit
-pillow
 pyzbar
-PIL
-datetime
-supabase
+pillow
 pandas
-re
+supabase-py
