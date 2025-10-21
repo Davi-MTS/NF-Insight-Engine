@@ -35,7 +35,7 @@ def extract_chave_acesso(text: str) -> str:
 
 
 def decode_qrcode_opencv(image: Image.Image) -> str:
-    """Lê QR Code com OpenCV (com realce de contraste para fotos de celular)"""
+    """Lê QR Code com OpenCV (realce de contraste para fotos de celular)"""
     img_array = np.array(image.convert("RGB"))
     img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     detector = cv2.QRCodeDetector()
@@ -86,41 +86,39 @@ def save_chave_supabase(chave: str, origem: str) -> bool:
             "timestamp": datetime.now().isoformat()
         }).execute()
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Erro ao salvar chave: {e}")
         return False
 
 
 def get_historico() -> pd.DataFrame:
-    """Retorna todas as chaves salvas no Supabase (colunas access_key/timestamp)"""
+    """Retorna todas as chaves salvas no Supabase"""
     try:
         response = supabase.table("qrcodes").select("*").order("timestamp", desc=True).execute()
         data = response.data or []
         df = pd.DataFrame(data)
 
         if df.empty:
-            return pd.DataFrame(columns=["chave", "origem", "datahora"])
+            return pd.DataFrame(columns=["Chave de Acesso", "Origem", "Data/Hora"])
 
-        # renomeia para o formato exibido
+        # Renomeia para exibição
         df = df.rename(columns={
-            "access_key": "chave",
-            "timestamp": "datahora"
+            "access_key": "Chave de Acesso",
+            "origem": "Origem",
+            "timestamp": "Data/Hora"
         })
 
-        for col in ["chave", "origem", "datahora"]:
-            if col not in df.columns:
-                df[col] = None
-
-        return df[["chave", "origem", "datahora"]]
+        return df[["Chave de Acesso", "Origem", "Data/Hora"]]
     except Exception as e:
         st.warning(f"⚠ Erro ao carregar histórico: {e}")
-        return pd.DataFrame(columns=["chave", "origem", "datahora"])
+        return pd.DataFrame(columns=["Chave de Acesso", "Origem", "Data/Hora"])
 
 # =========================
 # INTERFACE PRINCIPAL
 # =========================
 st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e)")
 
-tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de imagem"])
+tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de Imagem"])
 
 # -------------------------
 # TAB 1: Tirar Foto
@@ -173,7 +171,7 @@ st.subheader("📋 Chaves de Acesso Salvas")
 df = get_historico()
 
 if not df.empty:
-    st.dataframe(df.sort_values(by="datahora", ascending=False), use_container_width=True)
+    st.dataframe(df.sort_values(by="Data/Hora", ascending=False), use_container_width=True)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -181,7 +179,7 @@ if not df.empty:
     with col2:
         if st.button("🗑 Limpar histórico"):
             try:
-                supabase.table("qrcodes").delete().neq("id", 0).execute()
+                supabase.table("qrcodes").delete().neq("access_key", "").execute()
                 st.warning("Histórico apagado com sucesso!")
             except:
                 st.error("Erro ao limpar histórico.")
