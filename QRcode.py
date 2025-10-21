@@ -32,7 +32,7 @@ def extract_chave_acesso(text: str) -> str:
     return match.group(0) if match else None
 
 def decode_qrcode(image: Image.Image) -> str:
-    """Lê QR Code usando OpenCV (funciona na nuvem)"""
+    """Lê QR Code usando OpenCV (funciona na nuvem e celular)"""
     img_array = np.array(image.convert("RGB"))
     img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     detector = cv2.QRCodeDetector()
@@ -42,12 +42,9 @@ def decode_qrcode(image: Image.Image) -> str:
 def save_chave_supabase(chave: str, origem: str) -> bool:
     """Salva a chave no Supabase se ainda não existir"""
     try:
-        # Checa duplicidade real
         existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
         if existing.data:
-            return False  # Já existe
-
-        # Insere nova chave
+            return False
         supabase.table("qrcodes").insert({
             "chave": chave,
             "origem": origem,
@@ -72,61 +69,62 @@ def get_historico() -> pd.DataFrame:
 # =========================
 st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e)")
 
-tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de imagem"])
+st.markdown("""
+> **Use a câmera do seu celular ou faça upload da imagem da nota fiscal.**  
+> A imagem capturada será processada automaticamente para extrair a chave de acesso.
+""")
 
-# -------------------------
-# TAB 1: Tirar Foto
-# -------------------------
-with tab1:
-    st.write("📸 Tire uma foto do QR Code da nota fiscal usando a câmera do seu celular ou notebook.")
-    photo = st.camera_input("Tire uma foto do QR Code")
+col1, col2 = st.columns(2)
 
-    if photo:
-        img = Image.open(photo)
-        data = decode_qrcode(img)
-        if not data:
-            st.warning("Nenhum QR Code encontrado na imagem.")
-        else:
-            chave = extract_chave_acesso(data)
-            if chave:
-                if save_chave_supabase(chave, "Foto"):
-                    st.success(f"✅ Chave salva: {chave}")
-                else:
-                    st.info(f"⚠ Chave já existente: {chave}")
+with col1:
+    st.subheader("📸 Tirar Foto (câmera)")
+    st.markdown(
+        "<div style='transform: scale(1.4); transform-origin: top left;'>",
+        unsafe_allow_html=True
+    )
+    photo = st.camera_input("Aponte para o QR Code da nota")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with col2:
+    st.subheader("🖼 Upload de Imagem")
+    file = st.file_uploader("Selecione uma imagem (JPG, PNG)...", type=["jpg", "jpeg", "png"])
+
+# =========================
+# PROCESSAMENTO COMUM
+# =========================
+img = None
+origem = None
+
+if photo:
+    img = Image.open(photo)
+    origem = "Câmera"
+elif file:
+    img = Image.open(file)
+    origem = "Upload"
+
+if img:
+    data = decode_qrcode(img)
+    if not data:
+        st.warning("⚠ Nenhum QR Code detectado. Tente aproximar a câmera e garantir boa iluminação.")
+    else:
+        chave = extract_chave_acesso(data)
+        if chave:
+            if save_chave_supabase(chave, origem):
+                st.success(f"✅ Chave salva: {chave}")
             else:
-                st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
-
-# -------------------------
-# TAB 2: Upload de Imagem
-# -------------------------
-with tab2:
-    file = st.file_uploader("Selecione uma imagem de nota fiscal (JPG, PNG)...", type=["jpg", "jpeg", "png"])
-
-    if file:
-        img = Image.open(file)
-        data = decode_qrcode(img)
-        if not data:
-            st.warning("Nenhum QR Code encontrado na imagem.")
+                st.info(f"⚠ Chave já existente: {chave}")
         else:
-            chave = extract_chave_acesso(data)
-            if chave:
-                if save_chave_supabase(chave, "Upload"):
-                    st.success(f"✅ Chave salva: {chave}")
-                else:
-                    st.info(f"⚠ Chave já existente: {chave}")
-            else:
-                st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
+            st.error("❌ Nenhuma chave válida (44 dígitos) foi encontrada.")
 
-# -------------------------
+# =========================
 # HISTÓRICO
-# -------------------------
+# =========================
 st.markdown("---")
 st.subheader("📋 Chaves de Acesso Salvas")
 df = get_historico()
 
 if not df.empty:
-    st.dataframe(df.sort_values(by="datahora", ascending=False), width="stretch")
-
+    st.dataframe(df.sort_values(by="datahora", ascending=False"), width="stretch")
     col1, col2 = st.columns(2)
     with col1:
         st.download_button("⬇ Baixar CSV", df.to_csv(index=False), "qrcodes.csv", "text/csv")
