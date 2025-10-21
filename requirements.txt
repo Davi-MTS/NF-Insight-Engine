@@ -1,5 +1,5 @@
 streamlit
-pyzbar
 pillow
 pandas
-supabase-py
+opencv-python-headless
+supabase
