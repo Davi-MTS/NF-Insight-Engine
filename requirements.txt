@@ -1,5 +1,7 @@
 streamlit
+opencv-python-headless
+numpy
+pillow
 requests
-Pillow
-supabase
 pandas
+supabase
