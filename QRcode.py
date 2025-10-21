@@ -127,7 +127,7 @@ if not df.empty:
     st.dataframe(df.sort_values(by="datahora", ascending=False"), width="stretch")
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("⬇ Baixar CSV", df.to_csv(index=False), "qrcodes.csv", "text/csv")
+        st.download_button("⬇ Baixar CSV", df.to_csv(index="False"), "qrcodes.csv", "text/csv")
     with col2:
         if st.button("🗑 Limpar histórico"):
             try:
