@@ -12,6 +12,22 @@ import re
 # =========================
 st.set_page_config(page_title="Leitor de QR Code - NFC-e", layout="wide")
 
+# CSS para aumentar a câmera no celular
+st.markdown(
+    """
+    <style>
+    [data-testid="stCameraInput"] video,
+    [data-testid="stCameraInput"] canvas {
+        width: 100% !important;
+        height: auto !important;
+        border-radius: 16px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.25);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # =========================
 # SUPABASE CONFIGURAÇÃO
 # =========================
@@ -20,7 +36,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
+except Exception:
     st.error("❌ Erro ao conectar ao Supabase.")
 
 # =========================
@@ -42,12 +58,9 @@ def decode_qrcode(image: Image.Image) -> str:
 def save_chave_supabase(chave: str, origem: str) -> bool:
     """Salva a chave no Supabase se ainda não existir"""
     try:
-        # Checa duplicidade real
         existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
         if existing.data:
-            return False  # Já existe
-
-        # Insere nova chave
+            return False
         supabase.table("qrcodes").insert({
             "chave": chave,
             "origem": origem,
@@ -83,6 +96,7 @@ with tab1:
 
     if photo:
         img = Image.open(photo)
+        st.image(img, caption="📸 Imagem capturada", use_container_width=True)
         data = decode_qrcode(img)
         if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
@@ -104,6 +118,7 @@ with tab2:
 
     if file:
         img = Image.open(file)
+        st.image(img, caption="🖼 Imagem enviada", use_container_width=True)
         data = decode_qrcode(img)
         if not data:
             st.warning("Nenhum QR Code encontrado na imagem.")
