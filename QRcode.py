@@ -35,7 +35,7 @@ def extract_chave_acesso(text: str) -> str:
 
 
 def decode_qrcode_opencv(image: Image.Image) -> str:
-    """Lê QR Code com OpenCV (realce de contraste para fotos de celular)"""
+    """Lê QR Code com OpenCV (com realce de contraste para fotos de celular)"""
     img_array = np.array(image.convert("RGB"))
     img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     detector = cv2.QRCodeDetector()
@@ -73,7 +73,7 @@ def decode_qrcode(image: Image.Image) -> str:
     return decode_qrcode_api(image)
 
 
-def save_chave_supabase(chave: str, origem: str) -> bool:
+def save_chave_supabase(chave: str) -> bool:
     """Salva a chave no Supabase se ainda não existir"""
     try:
         existing = supabase.table("qrcodes").select("access_key").eq("access_key", chave).execute()
@@ -82,43 +82,43 @@ def save_chave_supabase(chave: str, origem: str) -> bool:
 
         supabase.table("qrcodes").insert({
             "access_key": chave,
-            "origem": origem,
             "timestamp": datetime.now().isoformat()
         }).execute()
         return True
-    except Exception as e:
-        st.error(f"Erro ao salvar chave: {e}")
+    except Exception:
         return False
 
 
 def get_historico() -> pd.DataFrame:
-    """Retorna todas as chaves salvas no Supabase"""
+    """Retorna todas as chaves salvas no Supabase (colunas access_key/timestamp)"""
     try:
         response = supabase.table("qrcodes").select("*").order("timestamp", desc=True).execute()
         data = response.data or []
         df = pd.DataFrame(data)
 
         if df.empty:
-            return pd.DataFrame(columns=["Chave de Acesso", "Origem", "Data/Hora"])
+            return pd.DataFrame(columns=["chave", "datahora"])
 
-        # Renomeia para exibição
         df = df.rename(columns={
-            "access_key": "Chave de Acesso",
-            "origem": "Origem",
-            "timestamp": "Data/Hora"
+            "access_key": "chave",
+            "timestamp": "datahora"
         })
 
-        return df[["Chave de Acesso", "Origem", "Data/Hora"]]
+        for col in ["chave", "datahora"]:
+            if col not in df.columns:
+                df[col] = None
+
+        return df[["chave", "datahora"]]
     except Exception as e:
         st.warning(f"⚠ Erro ao carregar histórico: {e}")
-        return pd.DataFrame(columns=["Chave de Acesso", "Origem", "Data/Hora"])
+        return pd.DataFrame(columns=["chave", "datahora"])
 
 # =========================
 # INTERFACE PRINCIPAL
 # =========================
 st.title("📷 Leitor de QR Code de Nota Fiscal (NFC-e)")
 
-tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de Imagem"])
+tab1, tab2 = st.tabs(["📸 Tirar Foto", "🖼 Upload de imagem"])
 
 # -------------------------
 # TAB 1: Tirar Foto
@@ -135,7 +135,7 @@ with tab1:
         else:
             chave = extract_chave_acesso(data)
             if chave:
-                if save_chave_supabase(chave, "Foto"):
+                if save_chave_supabase(chave):
                     st.success(f"✅ Chave salva: {chave}")
                 else:
                     st.info(f"⚠ Chave já existente: {chave}")
@@ -156,7 +156,7 @@ with tab2:
         else:
             chave = extract_chave_acesso(data)
             if chave:
-                if save_chave_supabase(chave, "Upload"):
+                if save_chave_supabase(chave):
                     st.success(f"✅ Chave salva: {chave}")
                 else:
                     st.info(f"⚠ Chave já existente: {chave}")
@@ -171,7 +171,7 @@ st.subheader("📋 Chaves de Acesso Salvas")
 df = get_historico()
 
 if not df.empty:
-    st.dataframe(df.sort_values(by="Data/Hora", ascending=False), use_container_width=True)
+    st.dataframe(df.sort_values(by="datahora", ascending=False), use_container_width=True)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -179,7 +179,7 @@ if not df.empty:
     with col2:
         if st.button("🗑 Limpar histórico"):
             try:
-                supabase.table("qrcodes").delete().neq("access_key", "").execute()
+                supabase.table("qrcodes").delete().neq("id", 0).execute()
                 st.warning("Histórico apagado com sucesso!")
             except:
                 st.error("Erro ao limpar histórico.")
