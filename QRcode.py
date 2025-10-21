@@ -35,12 +35,11 @@ def extract_chave_acesso(text: str) -> str:
 
 
 def decode_qrcode_opencv(image: Image.Image) -> str:
-    """Lê QR Code com OpenCV"""
+    """Lê QR Code com OpenCV (com realce de contraste para fotos de celular)"""
     img_array = np.array(image.convert("RGB"))
     img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     detector = cv2.QRCodeDetector()
 
-    # equaliza o contraste para melhorar leitura em fotos do celular
     img_gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     img_eq = cv2.equalizeHist(img_gray)
 
@@ -61,8 +60,8 @@ def decode_qrcode_api(image: Image.Image) -> str:
             match = re.search(r"Raw text</td><td>(.*?)</td>", resp.text)
             if match:
                 return match.group(1).strip()
-    except Exception as e:
-        st.warning(f"⚠ Erro ao usar API ZXing: {e}")
+    except Exception:
+        pass
     return None
 
 
@@ -77,30 +76,44 @@ def decode_qrcode(image: Image.Image) -> str:
 def save_chave_supabase(chave: str, origem: str) -> bool:
     """Salva a chave no Supabase se ainda não existir"""
     try:
-        existing = supabase.table("qrcodes").select("chave").eq("chave", chave).execute()
+        existing = supabase.table("qrcodes").select("access_key").eq("access_key", chave).execute()
         if existing.data:
             return False  # Já existe
 
         supabase.table("qrcodes").insert({
-            "chave": chave,
+            "access_key": chave,
             "origem": origem,
-            "datahora": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat()
         }).execute()
         return True
-    except:
+    except Exception:
         return False
 
 
 def get_historico() -> pd.DataFrame:
-    """Retorna todas as chaves salvas no Supabase"""
+    """Retorna todas as chaves salvas no Supabase (colunas access_key/timestamp)"""
     try:
-        response = supabase.table("qrcodes").select("*").order("datahora", desc=True).execute()
-        if response.data:
-            return pd.DataFrame(response.data)
-        return pd.DataFrame(columns=["chave", "origem", "datahora"])
-    except:
-        return pd.DataFrame(columns=["chave", "origem", "datahora"])
+        response = supabase.table("qrcodes").select("*").order("timestamp", desc=True).execute()
+        data = response.data or []
+        df = pd.DataFrame(data)
 
+        if df.empty:
+            return pd.DataFrame(columns=["chave", "origem", "datahora"])
+
+        # renomeia para o formato exibido
+        df = df.rename(columns={
+            "access_key": "chave",
+            "timestamp": "datahora"
+        })
+
+        for col in ["chave", "origem", "datahora"]:
+            if col not in df.columns:
+                df[col] = None
+
+        return df[["chave", "origem", "datahora"]]
+    except Exception as e:
+        st.warning(f"⚠ Erro ao carregar histórico: {e}")
+        return pd.DataFrame(columns=["chave", "origem", "datahora"])
 
 # =========================
 # INTERFACE PRINCIPAL
