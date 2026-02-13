@@ -17,8 +17,8 @@ st.set_page_config(page_title="Leitor de QR Code - NFC-e", layout="wide")
 # =========================
 # SUPABASE CONFIGURAÇÃO
 # =========================
-SUPABASE_URL = "https://ybgbyrjbczftmcuyxrvi.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliZ2J5cmpiY3pmdG1jdXl4cnZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwNTc5NzYsImV4cCI6MjA3NjYzMzk3Nn0.3g8UnQNsiEjwgvGtgdH2NRUoYCH09CMM2l3X2o2hlBw"
+SUPABASE_URL = "****"
+SUPABASE_KEY = "****"
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
