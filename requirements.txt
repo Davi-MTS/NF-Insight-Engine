@@ -1,7 +1,11 @@
-streamlit
-opencv-python-headless
+opencv-python
+pyzbar
 numpy
-pillow
-requests
-pandas
+Pillow
+streamlit
 supabase
+selenium
+webdriver-manager
+tabulate
+pandas
+matplotlib
